@@ -36,43 +36,6 @@ def video_to_frames(input_video,
 
     video.output(out_file).run(overwrite_output=True)
 
-# Image merging code I've used before, but it must be extended for more channels.
-# 
-def merge_images(image1_path, image2_path, output_path):
-    # Open the input images
-    image1 = Image.open(image1_path)
-    image2 = Image.open(image2_path)
-
-    # Ensure both images have the same dimensions
-    if image1.size != image2.size:
-        print("Error: Images should have the same dimensions.")
-        return
-
-    # Split the input images into their RGB channels
-    image1_r, image1_g, image1_b = image1.split()
-    image2_r, image2_g, image2_b = image2.split()
-
-    # Create a new image with 6 channels (3 from image1 and 3 from image2)
-    merged_image = Image.merge("RGBRGB", (image1_r, image1_g, image1_b, image2_r, image2_g, image2_b))
-
-    # Save the merged 6-channel image
-    merged_image.save(output_path)
-
-# A function for merging multiple images from two folders into a multiple single images
-# assume the images to merge have the same name
-def merge_images_from_folders(folder1, folder2, output_folder, should_skip_existing=True):
-    Path(output_folder).mkdir(parents=True, exist_ok=True)
-
-    for path1 in Path(folder1).iterdir():
-        if path1.is_file() and path1.suffix == ".png":
-            path2 = f"{folder2}/{path1.name}"
-            output_path = f"{output_folder}/{path1.name}"
-            
-            if should_skip_existing and Path(output_path).is_file():
-                continue
-
-            merge_images(path1, path2, output_path)
-
 def create_openpose_image(input_path, output_path):
     source_image = Image.open(input_path)
     pose_image = controlnet_hinter.hint_openpose(source_image)
@@ -109,19 +72,6 @@ if __name__ == "__main__":
     parser_extract_frames.add_argument("--x_offset", type=int, default=0, help="X offset for cropping (optional)")
     parser_extract_frames.add_argument("--y_offset", type=int, default=0, help="Y offset for cropping (optional)")
 
-    # Subparser for the merge-images command
-    parser_merge_images = subparsers.add_parser("merge-images", help="Merge RGB channels from two images into a 6-channel image")
-    parser_merge_images.add_argument("image1_path", help="Path to the first input image")
-    parser_merge_images.add_argument("image2_path", help="Path to the second input image")
-    parser_merge_images.add_argument("output_path", help="Path to save the output 6-channel image")
-
-        # Subparser for the create-openpose-images command
-    parser_merge_images_from_folders = subparsers.add_parser("merge-images-from-folders", help="Merge RGB channels from two images into a 6-channel image for entire folders")
-    parser_merge_images_from_folders.add_argument("image1_dir", help="Path to the input directory containing the first images")
-    parser_merge_images_from_folders.add_argument("image2_dir", help="Path to the input directory containing the second images")
-    parser_merge_images_from_folders.add_argument("output_dir", help="Path to save the output 6-channel image")
-    parser_merge_images_from_folders.add_argument("--do_not_skip_existing", action="store_false", default=True, help="Do not skip creating OpenPose images for existing output files")
-
     # Subparser for the create-openpose-image command
     parser_create_openpose_image = subparsers.add_parser("create-openpose-image", help="Create an OpenPose image from a single input image")
     parser_create_openpose_image.add_argument("input_path", help="Path to the input image")
@@ -140,10 +90,6 @@ if __name__ == "__main__":
 
     if args.command == "extract-frames":
         video_to_frames(args.input_video, args.output_dir, args.height, args.width, args.x_offset, args.y_offset)
-    elif args.command == "merge-images":
-        merge_images(args.image1_path, args.image2_path, args.output_path)
-    elif args.command == "merge-images-from-folders":
-        merge_images_from_folders(args.image1_dir, args.image2_dir, args.output_dir, args.do_not_skip_existing)
     elif args.command == "create-openpose-image":
         create_openpose_image(args.input_path, args.output_path)
     elif args.command == "create-openpose-images":
