@@ -621,8 +621,15 @@ def make_train_dataset(args, tokenizer, batch_size=None):
         images = [image.convert("RGB") for image in examples[image_column]]
         images = [image_transforms(image) for image in images]
 
-        conditioning_images = [image.convert("RGB") for image in examples[conditioning_image_column]]
-        conditioning_images = [conditioning_image_transforms(image) for image in conditioning_images]
+        conditioning_images_0 = [image.convert("RGB") for image in examples[conditioning_image_column]]
+        conditioning_images_0 = [conditioning_image_transforms(image) for image in conditioning_images_0]
+
+        conditioning_images_1 = [image.convert("RGB") for image in examples["pose_conditioning_image"]]
+        conditioning_images_1 = [conditioning_image_transforms(image) for image in conditioning_images_1]
+
+        # concatenate the conditioning images
+        # assuming we (B, C1, H, W) and (B, C2, H, W), we want (B, C1 + C2, H, W)
+        conditioning_images = torch.cat([conditioning_images_0, conditioning_images_1], dim=1)
 
         examples["pixel_values"] = images
         examples["conditioning_pixel_values"] = conditioning_images
