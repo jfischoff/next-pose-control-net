@@ -58,8 +58,27 @@ def merge_images(image1_path, image2_path, output_path):
     # Save the merged 6-channel image
     merged_image.save(output_path)
 
+# A function for merging multiple images from two folders into a multiple single images
+# assume the images to merge have the same name
+def merge_images_from_folders(folder1, folder2, output_folder, should_skip_existing=True):
+    Path(output_folder).mkdir(parents=True, exist_ok=True)
+
+    for path1 in Path(folder1).iterdir():
+        if path1.is_file() and path1.suffix == ".png":
+            path2 = f"{folder2}/{path1.name}"
+            output_path = f"{output_folder}/{path1.name}"
+            
+            if should_skip_existing and Path(output_path).is_file():
+                continue
+
+            merge_images(path1, path2, output_path)
+
 def create_openpose_image(input_path, output_path):
-    pose_image = controlnet_hinter.hint_openpose(Image.open(input_path))
+    source_image = Image.open(input_path)
+    pose_image = controlnet_hinter.hint_openpose(source_image)
+    # resize the image to 
+    pose_image = pose_image.resize(source_image.size)
+
     pose_image.save(output_path)
 
 # A function for iterating through a folder of pngs and creating openpose images
@@ -96,6 +115,13 @@ if __name__ == "__main__":
     parser_merge_images.add_argument("image2_path", help="Path to the second input image")
     parser_merge_images.add_argument("output_path", help="Path to save the output 6-channel image")
 
+        # Subparser for the create-openpose-images command
+    parser_merge_images_from_folders = subparsers.add_parser("merge-images-from-folders", help="Merge RGB channels from two images into a 6-channel image for entire folders")
+    parser_merge_images_from_folders.add_argument("image1_dir", help="Path to the input directory containing the first images")
+    parser_merge_images_from_folders.add_argument("image2_dir", help="Path to the input directory containing the second images")
+    parser_merge_images_from_folders.add_argument("output_dir", help="Path to save the output 6-channel image")
+    parser_merge_images_from_folders.add_argument("--do_not_skip_existing", action="store_false", default=True, help="Do not skip creating OpenPose images for existing output files")
+
     # Subparser for the create-openpose-image command
     parser_create_openpose_image = subparsers.add_parser("create-openpose-image", help="Create an OpenPose image from a single input image")
     parser_create_openpose_image.add_argument("input_path", help="Path to the input image")
@@ -116,6 +142,8 @@ if __name__ == "__main__":
         video_to_frames(args.input_video, args.output_dir, args.height, args.width, args.x_offset, args.y_offset)
     elif args.command == "merge-images":
         merge_images(args.image1_path, args.image2_path, args.output_path)
+    elif args.command == "merge-images-from-folders":
+        merge_images_from_folders(args.image1_dir, args.image2_dir, args.output_dir, args.do_not_skip_existing)
     elif args.command == "create-openpose-image":
         create_openpose_image(args.input_path, args.output_path)
     elif args.command == "create-openpose-images":
