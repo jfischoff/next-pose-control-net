@@ -1,0 +1,4 @@
+python src/preprocess.py merge-images-from-folders \
+  test-data/source-frames \
+  test-data/openpose-images \
+  test-output/merged-images
