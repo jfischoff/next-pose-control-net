@@ -1,9 +1,9 @@
 
 from PIL import Image
 import ffmpeg
-import os
 from pathlib import Path
 import argparse
+import controlnet_hinter
 
 def video_to_frames(input_video, 
                     output_dir, 
@@ -36,35 +36,63 @@ def video_to_frames(input_video,
 
     video.output(out_file).run(overwrite_output=True)
 
-# Image merging code I've used before, but it must be extended for more channels.
-# 
-# def merge_images(root_folder):
-#   initial_images_folder = os.path.join(root_folder, "initial_images_folder")
-#   next_outline_images_folder = os.path.join(root_folder, "next_outline_images_folder")
-# 
-#   # Iterate through the PNG files in the initial_images_folder
-#   for filename in os.listdir(initial_images_folder):
-#       if filename.endswith(".png"):
-#           # Open the initial image and the outline image
-#           initial_image_path = os.path.join(initial_images_folder, filename)
-#           outline_image_path = os.path.join(next_outline_images_folder, filename)
-#           initial_image = Image.open(initial_image_path).convert("RGBA")
-#           outline_image = Image.open(outline_image_path).convert("L")
-# 
-#           initial_image.putalpha(outline_image)
-# 
-#           initial_image.save(initial_image_path)
+def create_openpose_image(input_path, output_path):
+    source_image = Image.open(input_path)
+    pose_image = controlnet_hinter.hint_openpose(source_image)
+    # resize the image to 
+    pose_image = pose_image.resize(source_image.size)
+
+    pose_image.save(output_path)
+
+# A function for iterating through a folder of pngs and creating openpose images
+def create_openpose_images(input_dir, 
+                           output_dir, 
+                           should_skip_existing=True):
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    for path in Path(input_dir).iterdir():
+        if path.is_file() and path.suffix == ".png":
+            output_path = f"{output_dir}/{path.name}"
+
+            if should_skip_existing and Path(output_path).is_file():
+                continue
+            
+            create_openpose_image(path, output_path)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert video to frames with optional cropping")
-    parser.add_argument("input_video", help="Path to the input video file")
-    parser.add_argument("output_dir", help="Directory to save the output frames")
-    parser.add_argument("height", type=int, help="Height for uniformly scaling the frames")
-    parser.add_argument("--width", type=int, help="Width for cropping (optional)")
-    parser.add_argument("--x_offset", type=int, default=0, help="X offset for cropping (optional)")
-    parser.add_argument("--y_offset", type=int, default=0, help="Y offset for cropping (optional)")
+    parser = argparse.ArgumentParser(description="Image and video processing tool")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Subparser for the extract-frames command
+    parser_extract_frames = subparsers.add_parser("extract-frames", help="Convert video to frames with optional cropping")
+    parser_extract_frames.add_argument("input_video", help="Path to the input video file")
+    parser_extract_frames.add_argument("output_dir", help="Directory to save the output frames")
+    parser_extract_frames.add_argument("height", type=int, help="Height for uniformly scaling the frames")
+    parser_extract_frames.add_argument("--width", type=int, help="Width for cropping (optional)")
+    parser_extract_frames.add_argument("--x_offset", type=int, default=0, help="X offset for cropping (optional)")
+    parser_extract_frames.add_argument("--y_offset", type=int, default=0, help="Y offset for cropping (optional)")
+
+    # Subparser for the create-openpose-image command
+    parser_create_openpose_image = subparsers.add_parser("create-openpose-image", help="Create an OpenPose image from a single input image")
+    parser_create_openpose_image.add_argument("input_path", help="Path to the input image")
+    parser_create_openpose_image.add_argument("output_path", help="Path to save the output OpenPose image")
+
+    # Subparser for the create-openpose-images command
+    parser_create_openpose_images = subparsers.add_parser("create-openpose-images", help="Create OpenPose images for a folder of input images")
+    parser_create_openpose_images.add_argument("input_dir", help="Path to the input directory containing images")
+    parser_create_openpose_images.add_argument("output_dir", help="Directory to save the output OpenPose images")
+    parser_create_openpose_images.add_argument("--do_not_skip_existing", action="store_false", default=True, help="Do not skip creating OpenPose images for existing output files")
+
+
 
     args = parser.parse_args()
     print("args: ", args)
 
-    video_to_frames(args.input_video, args.output_dir, args.height, args.width, args.x_offset, args.y_offset)
+    if args.command == "extract-frames":
+        video_to_frames(args.input_video, args.output_dir, args.height, args.width, args.x_offset, args.y_offset)
+    elif args.command == "create-openpose-image":
+        create_openpose_image(args.input_path, args.output_path)
+    elif args.command == "create-openpose-images":
+        create_openpose_images(args.input_dir, args.output_dir, args.do_not_skip_existing)
+    else:
+        parser.print_help()
