@@ -1,0 +1,1 @@
+python src/preprocess.py create-jsonl test-data/source-frames/ test-data/openpose-images/ test-output/meta.jsonl

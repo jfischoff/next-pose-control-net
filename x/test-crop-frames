@@ -1,0 +1,1 @@
+python src/preprocess.py crop-frames test-data/source-frames/ test-output/cropped-source-frames/ 128 --width 64 --x_offset 32 --do_not_skip_existing
