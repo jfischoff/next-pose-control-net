@@ -171,6 +171,26 @@ def create_openpose_images(input_dir,
             
             create_openpose_image(path, output_path)
 
+
+def runner(input_video, 
+           frames_dir,
+           openpose_dir,
+           train_jsonl_file,
+           width,
+           height,
+           x_offset,
+           y_offset,
+            ):
+    # Extract frames from the video
+    video_to_frames(input_video, frames_dir, height, width, x_offset, y_offset)
+
+    # Create openpose images from the frames
+    create_openpose_images(frames_dir, openpose_dir)
+
+    # Create the jsonl file
+    create_jsonl(frames_dir, openpose_dir, train_jsonl_file)                              
+    
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Image and video processing tool")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -214,6 +234,16 @@ if __name__ == "__main__":
     parser_create_jsonl.add_argument("output_file", help="Output filename")
 
 
+    parser_run = subparsers.add_parser("run", help="Run the full preprocessing pipeline")
+    parser_run.add_argument("input_video", help="Path to the input video file")
+    parser_run.add_argument("frames_dir", help="Directory to save the output frames")
+    parser_run.add_argument("openpose_dir", help="Directory to save the output OpenPose images")
+    parser_run.add_argument("train_jsonl_file", help="Output filename")
+    parser_run.add_argument("width", type=int, help="Width for cropping (optional)")
+    parser_run.add_argument("height", type=int, help="Height for uniformly scaling the frames")
+    parser_run.add_argument("x_offset", type=int, default=0, help="X offset for cropping (optional)")
+    parser_run.add_argument("y_offset", type=int, default=0, help="Y offset for cropping (optional)")
+    
 
     args = parser.parse_args()
     print("args: ", args)
@@ -228,5 +258,7 @@ if __name__ == "__main__":
         create_jsonl(args.image_input_dir, args.pose_input_dir, args.output_file, args.text, args.use_captioning_model)
     elif args.command == "crop-frames":
         crop_frames(args.input_dir, args.output_dir, args.height, args.width, args.x_offset, args.y_offset, args.do_not_skip_existing)
+    elif args.command == "run":
+        runner(args.input_video, args.frames_dir, args.openpose_dir, args.train_jsonl_file, args.width, args.height, args.x_offset, args.y_offset)
     else:
         parser.print_help()
