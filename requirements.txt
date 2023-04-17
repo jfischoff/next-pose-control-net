@@ -10,3 +10,4 @@ wheel
 scipy
 torchvision
 scikit-image
+basicsr
