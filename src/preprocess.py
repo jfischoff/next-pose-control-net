@@ -4,7 +4,6 @@ import ffmpeg
 from pathlib import Path
 import os
 import argparse
-import controlnet_hinter
 import jsonlines
 import numpy as np
 
