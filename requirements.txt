@@ -3,3 +3,4 @@ imageio-ffmpeg
 Pillow
 transformers
 jsonlines
+wheel
