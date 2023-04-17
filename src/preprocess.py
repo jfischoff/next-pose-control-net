@@ -6,9 +6,11 @@ import os
 import argparse
 import controlnet_hinter
 import jsonlines
+import numpy as np
 
 from transformers import Blip2Processor, Blip2ForConditionalGeneration
 import torch
+from openpose import OpenposeDetector
 
 
 def get_captioning_model():
@@ -49,7 +51,8 @@ def video_to_frames(input_video,
                     height, 
                     width=None, 
                     x_offset=0, 
-                    y_offset=0):
+                    y_offset=0, 
+                    flip_height_and_width=False):
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # Get the original video's width and height
@@ -57,10 +60,18 @@ def video_to_frames(input_video,
     video_info = next(stream for stream in probe['streams'] if stream['codec_type'] == 'video')
     orig_width = int(video_info['width'])
     orig_height = int(video_info['height'])
+    print("flip_height_and_width: ", flip_height_and_width)
+    if flip_height_and_width:
+        orig_width, orig_height = orig_height, orig_width
+
+    print("orig_width: ", orig_width)
+    print("orig_height: ", orig_height)
 
     # compute the new width given the height
     aspect_ratio = orig_width / orig_height
+    print("aspect_ratio: ", aspect_ratio)
     scaled_width = int(height * aspect_ratio)
+    print("scaled_width: ", scaled_width)
 
     in_file = ffmpeg.input(input_video)
     out_file = f"{output_dir}/%010d.png"
@@ -146,21 +157,29 @@ def create_jsonl(image_input_dir,
                             'pose_conditioning_image': str(pose_image),
                         })
             
-    
-                   
-def create_openpose_image(input_path, output_path):
-    source_image = Image.open(input_path)
-    pose_image = controlnet_hinter.hint_openpose(source_image)
-    # resize the image to 
-    pose_image = pose_image.resize(source_image.size)
 
+def create_openpose_image(input_path, 
+                          output_path,
+                          openpose_detector=OpenposeDetector(),):
+    source_image = Image.open(input_path)
+
+    # convert the source_image to a numpy array
+    source_array = np.array(source_image)
+
+    pose_array = openpose_detector(source_array, 
+                                    hand_and_face=True)
+
+    # create an image from the pose_array
+    pose_image = Image.fromarray(pose_array)
     pose_image.save(output_path)
 
 # A function for iterating through a folder of pngs and creating openpose images
 def create_openpose_images(input_dir, 
                            output_dir, 
-                           should_skip_existing=True):
+                           should_skip_existing=True,):
     Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    openpose_detector = OpenposeDetector()
 
     for path in Path(input_dir).iterdir():
         if path.is_file() and path.suffix in IMAGE_FILE_EXTENSIONS:
@@ -169,7 +188,9 @@ def create_openpose_images(input_dir,
             if should_skip_existing and Path(output_path).is_file():
                 continue
             
-            create_openpose_image(path, output_path)
+            create_openpose_image(path, 
+                                  output_path, 
+                                  openpose_detector=openpose_detector)
 
 
 def runner(input_video, 
@@ -203,6 +224,7 @@ if __name__ == "__main__":
     parser_extract_frames.add_argument("--width", type=int, help="Width for cropping (optional)")
     parser_extract_frames.add_argument("--x_offset", type=int, default=0, help="X offset for cropping (optional)")
     parser_extract_frames.add_argument("--y_offset", type=int, default=0, help="Y offset for cropping (optional)")
+    parser_extract_frames.add_argument("--flip_height_and_width", action="store_true", default=False, help="Flip the height and width of the video")
 
     parser_crop_frames = subparsers.add_parser("crop-frames", help="Crop directory of images")
     parser_crop_frames.add_argument("input_dir", help="Path to the input video file")
@@ -249,16 +271,48 @@ if __name__ == "__main__":
     print("args: ", args)
 
     if args.command == "extract-frames":
-        video_to_frames(args.input_video, args.output_dir, args.height, args.width, args.x_offset, args.y_offset)
+        video_to_frames(args.input_video, 
+                        args.output_dir, 
+                        args.height, 
+                        args.width, 
+                        args.x_offset, 
+                        args.y_offset,
+                        args.flip_height_and_width,
+                        )
     elif args.command == "create-openpose-image":
-        create_openpose_image(args.input_path, args.output_path)
+        create_openpose_image(args.input_path, 
+                              args.output_path,
+                              )
     elif args.command == "create-openpose-images":
-        create_openpose_images(args.input_dir, args.output_dir, args.do_not_skip_existing)
+        create_openpose_images(args.input_dir, 
+                               args.output_dir, 
+                               args.do_not_skip_existing,
+                               )
     elif args.command == "create-jsonl":
-        create_jsonl(args.image_input_dir, args.pose_input_dir, args.output_file, args.text, args.use_captioning_model)
+        create_jsonl(args.image_input_dir, 
+                     args.pose_input_dir, 
+                     args.output_file, 
+                     args.text, 
+                     args.use_captioning_model,
+                     )
     elif args.command == "crop-frames":
-        crop_frames(args.input_dir, args.output_dir, args.height, args.width, args.x_offset, args.y_offset, args.do_not_skip_existing)
+        crop_frames(args.input_dir, 
+                    args.output_dir, 
+                    args.height, 
+                    args.width, 
+                    args.x_offset, 
+                    args.y_offset, 
+                    args.do_not_skip_existing,
+                    )
     elif args.command == "run":
-        runner(args.input_video, args.frames_dir, args.openpose_dir, args.train_jsonl_file, args.width, args.height, args.x_offset, args.y_offset)
+        runner(args.input_video, 
+               args.frames_dir, 
+               args.openpose_dir, 
+               args.train_jsonl_file, 
+               args.width, 
+               args.height, 
+               args.x_offset, 
+               args.y_offset,
+               )
     else:
         parser.print_help()
