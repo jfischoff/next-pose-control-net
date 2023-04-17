@@ -2,3 +2,5 @@ ffmpeg-python
 imageio-ffmpeg
 Pillow
 controlnet_hinter
+transformers
+jsonlines
