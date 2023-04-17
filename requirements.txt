@@ -1,6 +1,12 @@
 ffmpeg-python
+torch
+matplotlib
+opencv-python
 imageio-ffmpeg
 Pillow
 transformers
 jsonlines
 wheel
+scipy
+torchvision
+scikit-image
