@@ -1,9 +1,9 @@
 #! /usr/bin/bash
 python src/preprocess.py run \
   --input_video=/mnt/disks/persist/dance_subjects/transfer_videos/ \
-  --frames_dir=/mnt/disks/perists/dances_subjects_training_data/source_frames \
-  --openpose_dir=/mnt/disks/persists/dances_subjects_training_data/openpose_dir \
-  --train_jsonl_file=/mnt/disks/persists/dances_subjects_training_data/training.jsonl \
+  --frames_dir=/mnt/disks/persist/dances_subjects_training_data/source_frames \
+  --openpose_dir=/mnt/disks/persist/dances_subjects_training_data/openpose_dir \
+  --train_jsonl_file=/mnt/disks/persist/dances_subjects_training_data/training.jsonl \
   --width=256 \
   --height=256
 

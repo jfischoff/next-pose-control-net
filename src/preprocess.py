@@ -408,19 +408,19 @@ if __name__ == "__main__":
 
     parser_run = subparsers.add_parser(
         "run", help="Run the full preprocessing pipeline")
-    parser_run.add_argument("input_video", help="Path to the input video file")
+    parser_run.add_argument("--input_video", help="Path to the input video file")
     parser_run.add_argument(
-        "frames_dir", help="Directory to save the output frames")
+        "--frames_dir", help="Directory to save the output frames")
     parser_run.add_argument(
-        "openpose_dir", help="Directory to save the output OpenPose images")
-    parser_run.add_argument("train_jsonl_file", help="Output filename")
+        "--openpose_dir", help="Directory to save the output OpenPose images")
+    parser_run.add_argument("--train_jsonl_file", help="Output filename")
     parser_run.add_argument(
-        "width", type=int, help="Width for cropping (optional)")
+        "--width", type=int, help="Width for cropping (optional)")
     parser_run.add_argument(
-        "height", type=int, help="Height for uniformly scaling the frames")
-    parser_run.add_argument("x_offset", type=int, default=0,
+        "--height", type=int, help="Height for uniformly scaling the frames")
+    parser_run.add_argument("--x_offset", type=int, default=0,
                             help="X offset for cropping (optional)")
-    parser_run.add_argument("y_offset", type=int, default=0,
+    parser_run.add_argument("--y_offset", type=int, default=0,
                             help="Y offset for cropping (optional)")
 
     args = parser.parse_args()
