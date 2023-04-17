@@ -418,9 +418,9 @@ if __name__ == "__main__":
         "--width", type=int, help="Width for cropping (optional)")
     parser_run.add_argument(
         "--height", type=int, help="Height for uniformly scaling the frames")
-    parser_run.add_argument("--x_offset", type=int, default=0,
+    parser_run.add_argument("--x_offset", type=int, default=None,
                             help="X offset for cropping (optional)")
-    parser_run.add_argument("--y_offset", type=int, default=0,
+    parser_run.add_argument("--y_offset", type=int, default=None,
                             help="Y offset for cropping (optional)")
 
     args = parser.parse_args()
