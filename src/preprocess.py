@@ -316,6 +316,24 @@ if __name__ == "__main__":
     parser_extract_frames.add_argument(
         "--flip_height_and_width", action="store_true", default=False, help="Flip the height and width of the video")
 
+    parser_extract_frames = subparsers.add_parser(
+        "extract-frames-folder", help="Convert multiple videos in a folder to frames with optional cropping")
+    parser_extract_frames.add_argument(
+        "input_dir", help="Path to the input directory containing videos")
+    parser_extract_frames.add_argument(
+        "output_dir", help="Directory to save the output frames")
+    parser_extract_frames.add_argument(
+        "height", type=int, help="Height for uniformly scaling the frames")
+    parser_extract_frames.add_argument(
+        "--width", type=int, help="Width for cropping (optional)")
+    parser_extract_frames.add_argument(
+        "--x_offset", type=int, default=0, help="X offset for cropping (optional)")
+    parser_extract_frames.add_argument(
+        "--y_offset", type=int, default=0, help="Y offset for cropping (optional)")
+    parser_extract_frames.add_argument(
+        "--flip_height_and_width", action="store_true", default=False, help="Flip the height and width of the video")
+    
+
     parser_crop_frames = subparsers.add_parser(
         "crop-frames", help="Crop directory of images")
     parser_crop_frames.add_argument(
@@ -392,6 +410,15 @@ if __name__ == "__main__":
                         args.y_offset,
                         args.flip_height_and_width,
                         )
+    elif args.command == "extract-frames-folder":
+        video_folder_to_frames(args.input_dir,
+                               args.output_dir,
+                               args.height,
+                               args.width,
+                               args.x_offset,
+                               args.y_offset,
+                               args.flip_height_and_width,
+                               )
     elif args.command == "create-openpose-image":
         create_openpose_image(args.input_path,
                               args.output_path,
