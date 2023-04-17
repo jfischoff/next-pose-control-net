@@ -54,8 +54,8 @@ def video_to_frames(input_video,
                     output_dir,
                     height,
                     width=None,
-                    x_offset=0,
-                    y_offset=0,
+                    x_offset=None,
+                    y_offset=None,
                     flip_height_and_width=False):
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -65,29 +65,55 @@ def video_to_frames(input_video,
         stream for stream in probe['streams'] if stream['codec_type'] == 'video')
     orig_width = int(video_info['width'])
     orig_height = int(video_info['height'])
-    print("flip_height_and_width: ", flip_height_and_width)
     if flip_height_and_width:
         orig_width, orig_height = orig_height, orig_width
 
-    print("orig_width: ", orig_width)
-    print("orig_height: ", orig_height)
 
     # compute the new width given the height
-    aspect_ratio = orig_width / orig_height
-    print("aspect_ratio: ", aspect_ratio)
-    scaled_width = int(height * aspect_ratio)
-    print("scaled_width: ", scaled_width)
+    orig_aspect_ratio = orig_width / orig_height
+    if width is None:
+        scaled_width = int(height * orig_aspect_ratio)
+        scaled_height = height
+    else:
+        # need to figure out if we are going to crop
+        new_aspect_ratio = width / height
+        if new_aspect_ratio < orig_aspect_ratio:
+            scaled_width = int(height * orig_aspect_ratio)
+            scaled_height = height
+        else:
+            scaled_width = width
+            scaled_height = int(width / orig_aspect_ratio)
+
 
     in_file = ffmpeg.input(input_video)
     out_file = f"{output_dir}/%010d.png"
 
-    video = in_file.filter('scale', scaled_width, height)
+    print("scaled_width", scaled_width)
+    print("height", scaled_height)
+    video = in_file.filter('scale', scaled_width, scaled_height)
 
     # If the width is specified, crop the video
     if width is not None:
-        video = video.crop(x_offset, y_offset, width, height)
+        
+        new_aspect_ratio = width / height
 
-    print("video: ", video)
+        if x_offset is None:
+            if new_aspect_ratio < orig_aspect_ratio:
+                scale_factor = height / orig_height
+                x_offset = max(0, ((orig_width * scale_factor) - width) / 2)
+            else: 
+                x_offset = 0
+
+        if y_offset is None:
+            if new_aspect_ratio > orig_aspect_ratio:
+                scale_factor =  width / orig_width
+                y_offset = max(0, ((orig_height * scale_factor) - height) / 2)
+            else:
+                y_offset = 0
+        
+        print("x_offset", x_offset)
+        print("y_offset", y_offset)
+        video = video.crop(x_offset, y_offset, width, height)
 
     video.output(out_file).run(overwrite_output=True)
 
@@ -117,8 +143,8 @@ def video_folder_to_frames(input_dir,
                            output_dir,
                            height,
                            width=None,
-                           x_offset=0,
-                           y_offset=0,
+                           x_offset=None,
+                           y_offset=None,
                            flip_height_and_width=False,
                            movie_file_extensions=default_movie_file_extensions
                            ):
@@ -309,9 +335,9 @@ if __name__ == "__main__":
     parser_extract_frames.add_argument(
         "--width", type=int, help="Width for cropping (optional)")
     parser_extract_frames.add_argument(
-        "--x_offset", type=int, default=0, help="X offset for cropping (optional)")
+        "--x_offset", type=int, default=None, help="X offset for cropping (optional)")
     parser_extract_frames.add_argument(
-        "--y_offset", type=int, default=0, help="Y offset for cropping (optional)")
+        "--y_offset", type=int, default=None, help="Y offset for cropping (optional)")
     parser_extract_frames.add_argument(
         "--flip_height_and_width", action="store_true", default=False, help="Flip the height and width of the video")
 
@@ -326,9 +352,9 @@ if __name__ == "__main__":
     parser_extract_frames.add_argument(
         "--width", type=int, help="Width for cropping (optional)")
     parser_extract_frames.add_argument(
-        "--x_offset", type=int, default=0, help="X offset for cropping (optional)")
+        "--x_offset", type=int, default=None, help="X offset for cropping (optional)")
     parser_extract_frames.add_argument(
-        "--y_offset", type=int, default=0, help="Y offset for cropping (optional)")
+        "--y_offset", type=int, default=None, help="Y offset for cropping (optional)")
     parser_extract_frames.add_argument(
         "--flip_height_and_width", action="store_true", default=False, help="Flip the height and width of the video")
     

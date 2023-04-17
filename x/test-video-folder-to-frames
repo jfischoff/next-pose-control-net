@@ -1,2 +1,2 @@
 python src/preprocess.py extract-frames-folder test-data/ test-output/output_frames_folder_scaled_only 1024 --flip_height_and_width
-python src/preprocess.py extract-frames-folder test-data/ test-output/output_frames_folder_cropped 256 --width 128 --x_offset 64 --flip_height_and_width
+python src/preprocess.py extract-frames-folder test-data/ test-output/output_frames_folder_cropped 256 --width 256 --flip_height_and_width
