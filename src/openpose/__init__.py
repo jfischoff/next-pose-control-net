@@ -7,6 +7,23 @@ from . import util
 from .body import Body
 from .hand import Hand
 from .face import Face
+import logging
+import time
+from functools import wraps
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def timer_decorator(function):
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = function(*args, **kwargs)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        logging.info(f"{function.__name__} took {elapsed_time:.2f} seconds")
+        return result
+    return wrapper
 
 annotator_ckpts_path = os.path.join(os.path.dirname(__file__), 'ckpts')
 
@@ -16,6 +33,7 @@ hand_model_path = "https://huggingface.co/lllyasviel/Annotators/resolve/main/han
 face_model_path = "https://huggingface.co/lllyasviel/Annotators/resolve/main/facenet.pth"
 
 
+@timer_decorator
 def draw_pose(pose, H, W, draw_body=True, draw_hand=True, draw_face=True):
     bodies = pose['bodies']
     faces = pose['faces']
@@ -58,6 +76,7 @@ class OpenposeDetector:
         self.hand_estimation = Hand(hand_modelpath)
         self.face_estimation = Face(face_modelpath)
 
+    @timer_decorator
     def __call__(self, oriImg, hand_and_face=False, return_is_index=False):
         oriImg = oriImg[:, :, ::-1].copy()
         H, W, C = oriImg.shape

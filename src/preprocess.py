@@ -284,15 +284,17 @@ def runner(input_dir,
            should_skip_existing=True,
            use_captioning_model=False,
            prompts=None,
+           extract_frames=True
            ):
     # Extract frames from the video
-    video_folder_to_frames(input_dir=input_dir,
-                           output_dir=frames_dir,
-                           height=height,
-                           width=width,
-                           x_offset=x_offset,
-                           y_offset=y_offset,
-                           flip_height_and_width=flip_height_and_width)
+    if extract_frames:
+        video_folder_to_frames( input_dir=input_dir,
+                                output_dir=frames_dir,
+                                height=height,
+                                width=width,
+                                x_offset=x_offset,
+                                y_offset=y_offset,
+                                flip_height_and_width=flip_height_and_width)
 
     # iterate through each director in the frames_dir and pass the subdirectory to create_openpose_images
     for path in Path(frames_dir).iterdir():
@@ -422,6 +424,7 @@ if __name__ == "__main__":
                             help="X offset for cropping (optional)")
     parser_run.add_argument("--y_offset", type=int, default=None,
                             help="Y offset for cropping (optional)")
+    parser_run.add_argument("--skip_frame_extraction", action="store_true", help="disable frame extraction")
 
     args = parser.parse_args()
     print("args: ", args)
@@ -478,6 +481,7 @@ if __name__ == "__main__":
                args.height,
                args.x_offset,
                args.y_offset,
+               extract_frames=False,
                )
     else:
         parser.print_help()
