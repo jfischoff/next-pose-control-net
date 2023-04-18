@@ -4,6 +4,11 @@ from torchvision.transforms import ToTensor, ToPILImage
 import torch
 import torch.nn.functional as F
 import cv2
+try:
+    import torch_xla.core.xla_model as xm
+    _xla_available = True
+except ImportError:
+    _xla_available = False
 
 from . import util
 from torch.nn import Conv2d, Module, ReLU, MaxPool2d, init
@@ -323,9 +328,16 @@ class Face(object):
         self.threshold = heatmap_peak_thresh or params["heatmap_peak_thresh"]
         self.model = FaceNet()
         self.model.load_state_dict(torch.load(face_model_path))
-        if torch.cuda.is_available():
-            self.model = self.model.cuda()
-            print('cuda')
+
+        device = torch.device("cpu")
+
+        if _xla_available:
+            device = xm.xla_device()
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+
+        self.model.to(device)
+
         self.model.eval()
 
     def __call__(self, face_img):

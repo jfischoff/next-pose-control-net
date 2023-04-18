@@ -8,6 +8,11 @@ import matplotlib.pyplot as plt
 import matplotlib
 import torch
 from skimage.measure import label
+try:
+    import torch_xla.core.xla_model as xm
+    _xla_available = True
+except ImportError:
+    _xla_available = False
 
 from .model import handpose_model
 from . import util
@@ -15,9 +20,17 @@ from . import util
 class Hand(object):
     def __init__(self, model_path):
         self.model = handpose_model()
-        if torch.cuda.is_available():
-            self.model = self.model.cuda()
-            print('cuda')
+
+        device = torch.device("cpu")
+    
+
+        if _xla_available:
+            device = xm.xla_device()
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+
+        self.model.to(device)
+        
         model_dict = util.transfer(self.model, torch.load(model_path))
         self.model.load_state_dict(model_dict)
         self.model.eval()
