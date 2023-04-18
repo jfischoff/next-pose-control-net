@@ -346,8 +346,12 @@ class Face(object):
         w_size = 384
         x_data = torch.from_numpy(util.smart_resize(face_img, (w_size, w_size))).permute([2, 0, 1]) / 256.0 - 0.5
 
-        if torch.cuda.is_available():
-            x_data = x_data.cuda()
+        if _xla_available:
+            device = xm.xla_device()
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+
+        x_data = x_data.to(device)
 
         with torch.no_grad():
             hs = self.model(x_data[None, ...])
