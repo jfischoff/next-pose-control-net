@@ -54,9 +54,11 @@ class Body(object):
             data = torch.from_numpy(im).float()
             
             if _xla_available:
-                device = xm.xla_device()
+              device = xm.xla_device()
             elif torch.cuda.is_available():
-                device = torch.device("cuda")
+              device = torch.device("cuda")
+            else:
+              device = torch.device("cpu")
 
             data = data.to(device)
             # data = data.permute([2, 0, 1]).unsqueeze(0).float()

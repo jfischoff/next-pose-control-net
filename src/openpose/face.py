@@ -350,6 +350,8 @@ class Face(object):
             device = xm.xla_device()
         elif torch.cuda.is_available():
             device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
 
         x_data = x_data.to(device)
 
