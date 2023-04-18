@@ -1,5 +1,5 @@
 ffmpeg-python
-torch
+torch==2.0
 matplotlib
 opencv-python
 imageio-ffmpeg
@@ -11,3 +11,4 @@ scipy
 torchvision
 scikit-image
 basicsr
+cloud-tpu-client
