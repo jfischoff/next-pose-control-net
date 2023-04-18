@@ -60,8 +60,13 @@ class Hand(object):
             im = np.ascontiguousarray(im)
 
             data = torch.from_numpy(im).float()
-            if torch.cuda.is_available():
-                data = data.cuda()
+
+            if _xla_available:
+                device = xm.xla_device()
+            elif torch.cuda.is_available():
+                device = torch.device("cuda")
+
+            data = data.to(device)
 
             with torch.no_grad():
                 output = self.model(data).cpu().numpy()

@@ -52,8 +52,13 @@ class Body(object):
             im = np.ascontiguousarray(im)
 
             data = torch.from_numpy(im).float()
-            if torch.cuda.is_available():
-                data = data.cuda()
+            
+            if _xla_available:
+                device = xm.xla_device()
+            elif torch.cuda.is_available():
+                device = torch.device("cuda")
+
+            data = data.to(device)
             # data = data.permute([2, 0, 1]).unsqueeze(0).float()
             with torch.no_grad():
                 Mconv7_stage6_L1, Mconv7_stage6_L2 = self.model(data)
