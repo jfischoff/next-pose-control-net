@@ -1,4 +1,14 @@
 ffmpeg-python
+torch==2.0
+matplotlib
+opencv-python
 imageio-ffmpeg
 Pillow
-controlnet_hinter
+transformers
+jsonlines
+wheel
+scipy
+torchvision
+scikit-image
+basicsr
+cloud-tpu-client
