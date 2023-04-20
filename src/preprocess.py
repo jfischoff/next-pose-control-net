@@ -9,8 +9,7 @@ import numpy as np
 
 from transformers import Blip2Processor, Blip2ForConditionalGeneration
 import torch
-from openpose import OpenposeDetector
-
+from controlnet_aux import OpenposeDetector
 
 def get_captioning_model():
     device = "cuda" if torch.cuda.is_available() else "cpu"
