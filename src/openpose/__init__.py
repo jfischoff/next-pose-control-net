@@ -33,7 +33,6 @@ hand_model_path = "https://huggingface.co/lllyasviel/Annotators/resolve/main/han
 face_model_path = "https://huggingface.co/lllyasviel/Annotators/resolve/main/facenet.pth"
 
 
-@timer_decorator
 def draw_pose(pose, H, W, draw_body=True, draw_hand=True, draw_face=True):
     bodies = pose['bodies']
     faces = pose['faces']
@@ -76,7 +75,6 @@ class OpenposeDetector:
         self.hand_estimation = Hand(hand_modelpath)
         self.face_estimation = Face(face_modelpath)
 
-    @timer_decorator
     def __call__(self, oriImg, hand_and_face=False, return_is_index=False):
         oriImg = oriImg[:, :, ::-1].copy()
         H, W, C = oriImg.shape

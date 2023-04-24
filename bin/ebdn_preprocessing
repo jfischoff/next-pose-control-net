@@ -4,7 +4,6 @@ python src/preprocess.py run \
   --frames_dir=/mnt/disks/persist/dances_subjects_training_data/source_frames \
   --openpose_dir=/mnt/disks/persist/dances_subjects_training_data/openpose_dir \
   --train_jsonl_file=/mnt/disks/persist/dances_subjects_training_data/training.jsonl \
-  --width=256 \
-  --height=256 \
-  --skip_frame_extraction
+  --width=512 \
+  --height=512 
 

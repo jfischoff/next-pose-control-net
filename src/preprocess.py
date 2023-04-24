@@ -481,7 +481,7 @@ if __name__ == "__main__":
                args.height,
                args.x_offset,
                args.y_offset,
-               extract_frames=False,
+               extract_frames=True,
                )
     else:
         parser.print_help()
