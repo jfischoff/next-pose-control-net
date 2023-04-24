@@ -1,5 +1,4 @@
 ffmpeg-python
-torch==2.0
 matplotlib
 opencv-python
 imageio-ffmpeg
@@ -12,3 +11,6 @@ torchvision
 scikit-image
 basicsr
 cloud-tpu-client
+datasets
+accelerate
+jax[tpu]
