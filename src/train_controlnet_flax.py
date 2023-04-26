@@ -264,6 +264,11 @@ def parse_args():
         help="Load the controlnet model from a PyTorch checkpoint.",
     )
     parser.add_argument(
+        "--transfer_pose_controlnet",
+        action="store_true",
+        help="Retain all the pose parts of the controlnet model from a PyTorch checkpoint.",
+    )
+    parser.add_argument(
         "--tokenizer_name",
         type=str,
         default=None,
@@ -805,6 +810,13 @@ def main():
             from_pt=args.controlnet_from_pt,
             dtype=jnp.float32,
         )
+        if args.transfer_pose_controlnet:
+            k= controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']
+            controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jnp.concatenate((jnp.zeros_like(k), k), axis=2)
+        else:
+            rng, rng_params = jax.random.split(rng)
+
+            controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jax.nn.initializers.lecun_normal()(rng_params, (3,3,6,16), jnp.float32)
     else:
         logger.info("Initializing controlnet weights from unet")
         rng, rng_params = jax.random.split(rng)
@@ -834,7 +846,9 @@ def main():
         ]:
             controlnet_params[key] = unet_params[key]
         rng, rng_params = jax.random.split(rng)
+
         controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jax.nn.initializers.lecun_normal()(rng_params, (3,3,6,16), jnp.float32)
+
             
     # Optimization
     if args.scale_lr:
