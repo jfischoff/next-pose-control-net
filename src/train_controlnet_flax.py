@@ -94,15 +94,10 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
     num_samples = jax.device_count()
     prng_seed = jax.random.split(rng, jax.device_count())
 
-    if len(args.validation_image) == len(args.validation_prompt):
+    if len(args.validation_image) == len(args.validation_prompt) == len(args.pose_validation_image):
         validation_images = args.validation_image
         validation_prompts = args.validation_prompt
-    elif len(args.validation_image) == 1:
-        validation_images = args.validation_image * len(args.validation_prompt)
-        validation_prompts = args.validation_prompt
-    elif len(args.validation_prompt) == 1:
-        validation_images = args.validation_image
-        validation_prompts = args.validation_prompt * len(args.validation_image)
+        pose_validation_images = args.pose_validation_image
     else:
         raise ValueError(
             "number of `args.validation_image` and `args.validation_prompt` should be checked in `parse_args`"
@@ -110,17 +105,35 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
 
     image_logs = []
 
-    for validation_prompt, validation_image in zip(validation_prompts, validation_images):
+    conditioning_image_transforms = transforms.Compose(
+        [
+            transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.CenterCrop(args.resolution),
+            transforms.ToTensor(),
+        ]
+    )
+
+    
+    for validation_prompt, validation_image, pose_validation_image in zip(validation_prompts, validation_images, pose_validation_images):
         prompts = num_samples * [validation_prompt]
         prompt_ids = pipeline.prepare_text_inputs(prompts)
         prompt_ids = shard(prompt_ids)
 
         validation_image = Image.open(validation_image).convert("RGB")
-        processed_image = pipeline.prepare_image_inputs(num_samples * [validation_image])
-        processed_image = shard(processed_image)
+        processed_image = num_samples * [validation_image]
+        processed_image = torch.stack([conditioning_image_transforms(image) for image in processed_image], dim=0)
+
+        pose_validation_image = Image.open(pose_validation_image).convert("RGB")
+        pose_processed_image = num_samples * [pose_validation_image]
+        pose_processed_image = torch.stack([conditioning_image_transforms(image) for image in pose_processed_image], dim=0)
+
+        all_processed_image = torch.cat([processed_image, pose_processed_image], dim=1).float().numpy()
+
+        all_processed_image = shard(all_processed_image)
+
         images = pipeline(
             prompt_ids=prompt_ids,
-            image=processed_image,
+            image=all_processed_image,
             params=params,
             prng_seed=prng_seed,
             num_inference_steps=50,
@@ -131,7 +144,7 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
         images = pipeline.numpy_to_pil(images)
 
         image_logs.append(
-            {"validation_image": validation_image, "images": images, "validation_prompt": validation_prompt}
+            {"validation_image": validation_image, "pose_validation_image": pose_validation_image, "images": images, "validation_prompt": validation_prompt}
         )
 
     if args.report_to == "wandb":
@@ -140,8 +153,10 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
             images = log["images"]
             validation_prompt = log["validation_prompt"]
             validation_image = log["validation_image"]
+            pose_validation_image = log["pose_validation_image"]
 
             formatted_images.append(wandb.Image(validation_image, caption="Controlnet conditioning"))
+            formatted_images.append(wandb.Image(pose_validation_image, caption="Controlnet pose conditioning"))
             for image in images:
                 image = wandb.Image(image, caption=validation_prompt)
                 formatted_images.append(image)
@@ -450,6 +465,17 @@ def parse_args():
             " and logged to `--report_to`. Provide either a matching number of `--validation_prompt`s, a"
             " a single `--validation_prompt` to be used with all `--validation_image`s, or a single"
             " `--validation_image` that will be used with all `--validation_prompt`s."
+        ),
+    )
+    parser.add_argument(
+        "--pose_validation_image",
+        type=str,
+        default=None,
+        nargs="+",
+        help=(
+            "A set of paths to the controlnet pose conditioning image be evaluated every `--validation_steps`"
+            " and logged to `--report_to`. Provide a matching number of `--validation_prompt`s, and"
+            "`--validation_image`'s"
         ),
     )
     parser.add_argument(
@@ -854,6 +880,8 @@ def main():
         return snr
 
     def train_step(state, unet_params, text_encoder_params, vae_params, batch, train_rng):
+
+
         # reshape batch, add grad_step_dim if gradient_accumulation_steps > 1
         if args.gradient_accumulation_steps > 1:
             grad_steps = args.gradient_accumulation_steps
@@ -972,6 +1000,9 @@ def main():
             )
             loss, grad = jax.tree_map(lambda x: x / args.gradient_accumulation_steps, (loss, grad))
 
+
+
+            
         grad = jax.lax.pmean(grad, "batch")
 
         new_state = state.apply_gradients(grads=grad)
@@ -1065,6 +1096,8 @@ def main():
                 train_metric["loss"].block_until_ready()
                 jax.profiler.stop_trace()
 
+
+                
             batch = shard(batch)
             with jax.profiler.StepTraceAnnotation("train", step_num=global_step):
                 state, train_metric, train_rngs = p_train_step(
