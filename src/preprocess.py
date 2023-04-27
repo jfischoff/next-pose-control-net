@@ -298,9 +298,11 @@ def runner(input_dir,
     for path in Path(frames_dir).iterdir():
         if path.is_dir():
             this_openpose_dir = f"{openpose_dir}/{path.stem}"
+            """
             create_openpose_images(input_dir=path,
                                    output_dir=this_openpose_dir,
                                    should_skip_existing=should_skip_existing)
+            """
 
             if prompts is not None:
                 this_prompt = prompts[path.stem]

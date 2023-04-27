@@ -94,15 +94,10 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
     num_samples = jax.device_count()
     prng_seed = jax.random.split(rng, jax.device_count())
 
-    if len(args.validation_image) == len(args.validation_prompt):
+    if len(args.validation_image) == len(args.validation_prompt) == len(args.pose_validation_image):
         validation_images = args.validation_image
         validation_prompts = args.validation_prompt
-    elif len(args.validation_image) == 1:
-        validation_images = args.validation_image * len(args.validation_prompt)
-        validation_prompts = args.validation_prompt
-    elif len(args.validation_prompt) == 1:
-        validation_images = args.validation_image
-        validation_prompts = args.validation_prompt * len(args.validation_image)
+        pose_validation_images = args.pose_validation_image
     else:
         raise ValueError(
             "number of `args.validation_image` and `args.validation_prompt` should be checked in `parse_args`"
@@ -110,17 +105,35 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
 
     image_logs = []
 
-    for validation_prompt, validation_image in zip(validation_prompts, validation_images):
+    conditioning_image_transforms = transforms.Compose(
+        [
+            transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.CenterCrop(args.resolution),
+            transforms.ToTensor(),
+        ]
+    )
+
+    
+    for validation_prompt, validation_image, pose_validation_image in zip(validation_prompts, validation_images, pose_validation_images):
         prompts = num_samples * [validation_prompt]
         prompt_ids = pipeline.prepare_text_inputs(prompts)
         prompt_ids = shard(prompt_ids)
 
         validation_image = Image.open(validation_image).convert("RGB")
-        processed_image = pipeline.prepare_image_inputs(num_samples * [validation_image])
-        processed_image = shard(processed_image)
+        processed_image = num_samples * [validation_image]
+        processed_image = torch.stack([conditioning_image_transforms(image) for image in processed_image], dim=0)
+
+        pose_validation_image = Image.open(pose_validation_image).convert("RGB")
+        pose_processed_image = num_samples * [pose_validation_image]
+        pose_processed_image = torch.stack([conditioning_image_transforms(image) for image in pose_processed_image], dim=0)
+
+        all_processed_image = torch.cat([processed_image, pose_processed_image], dim=1).float().numpy()
+
+        all_processed_image = shard(all_processed_image)
+
         images = pipeline(
             prompt_ids=prompt_ids,
-            image=processed_image,
+            image=all_processed_image,
             params=params,
             prng_seed=prng_seed,
             num_inference_steps=50,
@@ -131,7 +144,7 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
         images = pipeline.numpy_to_pil(images)
 
         image_logs.append(
-            {"validation_image": validation_image, "images": images, "validation_prompt": validation_prompt}
+            {"validation_image": validation_image, "pose_validation_image": pose_validation_image, "images": images, "validation_prompt": validation_prompt}
         )
 
     if args.report_to == "wandb":
@@ -140,8 +153,10 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
             images = log["images"]
             validation_prompt = log["validation_prompt"]
             validation_image = log["validation_image"]
+            pose_validation_image = log["pose_validation_image"]
 
             formatted_images.append(wandb.Image(validation_image, caption="Controlnet conditioning"))
+            formatted_images.append(wandb.Image(pose_validation_image, caption="Controlnet pose conditioning"))
             for image in images:
                 image = wandb.Image(image, caption=validation_prompt)
                 formatted_images.append(image)
@@ -247,6 +262,22 @@ def parse_args():
         "--controlnet_from_pt",
         action="store_true",
         help="Load the controlnet model from a PyTorch checkpoint.",
+    ) 
+    parser.add_argument(
+        "--transfer_pose_controlnet",
+        action="store_true",
+        help="Retain all the pose parts of the controlnet model from a PyTorch checkpoint.",
+    )
+    parser.add_argument(
+        "--zero_previous_image_kernel",
+        action="store_true",
+        help="Zero out kernel for previous image (use with --transfer_pose_controlnet).",
+    )
+    parser.add_argument(
+        "--proportion_previous_frame_zero",
+        type=float,
+        default=0.0,
+        help="Proportion of samples for which previous image frame is set to zero",
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -450,6 +481,17 @@ def parse_args():
             " and logged to `--report_to`. Provide either a matching number of `--validation_prompt`s, a"
             " a single `--validation_prompt` to be used with all `--validation_image`s, or a single"
             " `--validation_image` that will be used with all `--validation_prompt`s."
+        ),
+    )
+    parser.add_argument(
+        "--pose_validation_image",
+        type=str,
+        default=None,
+        nargs="+",
+        help=(
+            "A set of paths to the controlnet pose conditioning image be evaluated every `--validation_steps`"
+            " and logged to `--report_to`. Provide a matching number of `--validation_prompt`s, and"
+            "`--validation_image`'s"
         ),
     )
     parser.add_argument(
@@ -779,6 +821,17 @@ def main():
             from_pt=args.controlnet_from_pt,
             dtype=jnp.float32,
         )
+        if args.transfer_pose_controlnet:
+            k= controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']
+            if args.zero_previous_image_kernel:
+                controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jnp.concatenate((jnp.zeros_like(k), k), axis=2)
+            else:
+                rng, rng_params = jax.random.split(rng)
+                controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jnp.concatenate((jax.nn.initializers.lecun_normal()(rng_params, (3,3,3,16), jnp.float32), k), axis=2)
+        else:
+            rng, rng_params = jax.random.split(rng)
+
+            controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jax.nn.initializers.lecun_normal()(rng_params, (3,3,6,16), jnp.float32)
     else:
         logger.info("Initializing controlnet weights from unet")
         rng, rng_params = jax.random.split(rng)
@@ -808,7 +861,9 @@ def main():
         ]:
             controlnet_params[key] = unet_params[key]
         rng, rng_params = jax.random.split(rng)
+
         controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jax.nn.initializers.lecun_normal()(rng_params, (3,3,6,16), jnp.float32)
+
             
     # Optimization
     if args.scale_lr:
@@ -854,6 +909,7 @@ def main():
         return snr
 
     def train_step(state, unet_params, text_encoder_params, vae_params, batch, train_rng):
+
         # reshape batch, add grad_step_dim if gradient_accumulation_steps > 1
         if args.gradient_accumulation_steps > 1:
             grad_steps = args.gradient_accumulation_steps
@@ -870,7 +926,7 @@ def main():
             latents = latents * vae.config.scaling_factor
 
             # Sample noise that we'll add to the latents
-            noise_rng, timestep_rng = jax.random.split(sample_rng)
+            prev_rng, noise_rng, timestep_rng = jax.random.split(sample_rng, 3)
             noise = jax.random.normal(noise_rng, latents.shape)
             # Sample a random timestep for each image
             bsz = latents.shape[0]
@@ -893,7 +949,11 @@ def main():
             )[0]
 
             controlnet_cond = minibatch["conditioning_pixel_values"]
-
+            bz = controlnet_cond.shape[0]
+            if args.proportion_previous_frame_zero:
+                use_previous_frame = jax.random.uniform(prev_rng, (bz,))>args.proportion_previous_frame_zero
+                controlnet_cond = jnp.concatenate((use_previous_frame*controlnet_cond[:,:3,:,:], controlnet_cond[:,3:,:,:]), axis=1)
+            
             # Predict the noise residual and compute loss
             down_block_res_samples, mid_block_res_sample = controlnet.apply(
                 {"params": params},
@@ -972,6 +1032,7 @@ def main():
             )
             loss, grad = jax.tree_map(lambda x: x / args.gradient_accumulation_steps, (loss, grad))
 
+            
         grad = jax.lax.pmean(grad, "batch")
 
         new_state = state.apply_gradients(grads=grad)
@@ -1065,6 +1126,7 @@ def main():
                 train_metric["loss"].block_until_ready()
                 jax.profiler.stop_trace()
 
+                
             batch = shard(batch)
             with jax.profiler.StepTraceAnnotation("train", step_num=global_step):
                 state, train_metric, train_rngs = p_train_step(
