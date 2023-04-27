@@ -1,0 +1,5 @@
+python src/preprocess.py create-jsonl \
+  --frame_offset=15 \
+  /mnt/disks/persist/dances_subjects_training_data/source_frames/ \
+  /mnt/disks/persist/dances_subjects_training_data/openpose_dir/ \
+  /mnt/disks/persist/dances_subjects_training_data/train.jsonl
