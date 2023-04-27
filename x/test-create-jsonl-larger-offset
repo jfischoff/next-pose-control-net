@@ -1,0 +1,5 @@
+python src/preprocess.py create-jsonl \
+--frame_offset=2 \
+test-data/source-frames/ \
+test-data/openpose-images/ \
+test-output/meta.jsonl 
