@@ -414,6 +414,7 @@ if __name__ == "__main__":
     parser_create_jsonl.add_argument(
         "--use_captioning_model", action="store_true", help="Use captioning model to describe images")
     parser_create_jsonl.add_argument("--frame_offset", type=int, default=1,)
+    parser_create_jsonl.add_argument("--append", action="store_true", default=False,)
 
     parser_run = subparsers.add_parser(
         "run", help="Run the full preprocessing pipeline")
@@ -469,6 +470,7 @@ if __name__ == "__main__":
                      text=args.text,
                      use_captioning_model=args.use_captioning_model,
                      frame_offset=args.frame_offset,
+                     append=args.append,
                      )
     elif args.command == "crop-frames":
         crop_frames(args.input_dir,
