@@ -207,6 +207,7 @@ def crop_frames(input_dir,
 def create_jsonl(image_input_dir,
                  pose_input_dir,
                  output_file,
+                 frame_offset=1,
                  text="A photo of a person dancing",
                  use_captioning_model=False,
                  append=False):
@@ -214,13 +215,18 @@ def create_jsonl(image_input_dir,
     if use_captioning_model:
         captioner = get_captioning_model()
 
-    with jsonlines.open(output_file, 'a' if append else 'w') as writer:  #
+    with jsonlines.open(output_file, 'a' if append else 'w') as writer:
         input_images = []
         for path in Path(image_input_dir).iterdir():
             if path.is_file() and path.suffix in IMAGE_FILE_EXTENSIONS:
                 input_images.append(path)
         input_images.sort()
-        for prev_image, curr_image in zip(input_images[:-1], input_images[1:]):
+
+        for idx, curr_image in enumerate(input_images[frame_offset:], frame_offset):
+            prior_index = idx - frame_offset
+            if prior_index < 0:
+                continue
+            prev_image = input_images[prior_index]
             _, tail = os.path.split(curr_image)
             pose_image = os.path.join(pose_input_dir, tail)
 
@@ -402,11 +408,12 @@ if __name__ == "__main__":
         "image_input_dir", help="Path to the input directory containing images")
     parser_create_jsonl.add_argument(
         "pose_input_dir", help="Path to the input directory containing images")
+    parser_create_jsonl.add_argument("output_file", help="Output filename")
     parser_create_jsonl.add_argument(
         "--text", default="A photo of a person dancing", help="Description of images")
     parser_create_jsonl.add_argument(
         "--use_captioning_model", action="store_true", help="Use captioning model to describe images")
-    parser_create_jsonl.add_argument("output_file", help="Output filename")
+    parser_create_jsonl.add_argument("--frame_offset", type=int, default=1,)
 
     parser_run = subparsers.add_parser(
         "run", help="Run the full preprocessing pipeline")
@@ -459,8 +466,9 @@ if __name__ == "__main__":
         create_jsonl(args.image_input_dir,
                      args.pose_input_dir,
                      args.output_file,
-                     args.text,
-                     args.use_captioning_model,
+                     text=args.text,
+                     use_captioning_model=args.use_captioning_model,
+                     frame_offset=args.frame_offset,
                      )
     elif args.command == "crop-frames":
         crop_frames(args.input_dir,
