@@ -1,10 +1,12 @@
 python src/train_controlnet_flax.py \
-	--pretrained_model_name_or_path='bguisard/stable-diffusion-nano' \
-	--output_dir=/mnt/disks/persist/runs \
+	--pretrained_model_name_or_path='/mnt/disks/persist/models/stable-diffusion-v1-5' \
+	--output_dir=/mnt/disks/persist/runs-512 \
         --resolution=512 \
-        --train_batch_size=128 \
+        --train_batch_size=8 \
         --train_data_dir=/mnt/disks/persist/dances_subjects_training_data/data.py \
         --proportion_empty_prompts=0.5 \
         --tracker_project_name=next-pose-control-net-2 \
-	--cache_dir=/home/jonathan/.huggingface-cache
+	--cache_dir=/home/jonathan/.huggingface-cache \
+        --wandb_entity=jonathangfischoff \
+	--from_pt
                 
