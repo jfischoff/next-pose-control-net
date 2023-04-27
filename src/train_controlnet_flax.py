@@ -952,7 +952,7 @@ def main():
             bz = controlnet_cond.shape[0]
             if args.proportion_previous_frame_zero:
                 use_previous_frame = jax.random.uniform(prev_rng, (bz,))>args.proportion_previous_frame_zero
-                controlnet_cond = jnp.concatenate((use_previous_frame*controlnet_cond[:,:3,:,:], controlnet_cond[:,3:,:,:]), axis=1)
+                controlnet_cond = jnp.concatenate((use_previous_frame[:,None,None,None]*controlnet_cond[:,:3,:,:], controlnet_cond[:,3:,:,:]), axis=1)
             
             # Predict the noise residual and compute loss
             down_block_res_samples, mid_block_res_sample = controlnet.apply(
