@@ -910,7 +910,6 @@ def main():
 
     def train_step(state, unet_params, text_encoder_params, vae_params, batch, train_rng):
 
-
         # reshape batch, add grad_step_dim if gradient_accumulation_steps > 1
         if args.gradient_accumulation_steps > 1:
             grad_steps = args.gradient_accumulation_steps
@@ -1033,8 +1032,6 @@ def main():
             )
             loss, grad = jax.tree_map(lambda x: x / args.gradient_accumulation_steps, (loss, grad))
 
-
-
             
         grad = jax.lax.pmean(grad, "batch")
 
@@ -1128,7 +1125,6 @@ def main():
             if args.profile_steps and global_step == 1 + args.profile_steps:
                 train_metric["loss"].block_until_ready()
                 jax.profiler.stop_trace()
-
 
                 
             batch = shard(batch)
