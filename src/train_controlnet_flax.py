@@ -262,11 +262,22 @@ def parse_args():
         "--controlnet_from_pt",
         action="store_true",
         help="Load the controlnet model from a PyTorch checkpoint.",
-    )
+    ) 
     parser.add_argument(
         "--transfer_pose_controlnet",
         action="store_true",
         help="Retain all the pose parts of the controlnet model from a PyTorch checkpoint.",
+    )
+    parser.add_argument(
+        "--zero_previous_image_kernel",
+        action="store_true",
+        help="Zero out kernel for previous image (use with --transfer_pose_controlnet).",
+    )
+    parser.add_argument(
+        "--proportion_previous_frame_zero",
+        type=float,
+        default=0.0,
+        help="Proportion of samples for which previous image frame is set to zero",
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -812,7 +823,11 @@ def main():
         )
         if args.transfer_pose_controlnet:
             k= controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']
-            controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jnp.concatenate((jnp.zeros_like(k), k), axis=2)
+            if args.zero_previous_image_kernel:
+                controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jnp.concatenate((jnp.zeros_like(k), k), axis=2)
+            else:
+                rng, rng_params = jax.random.split(rng)
+                controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jnp.concatenate((jax.nn.initializers.lecun_normal()(rng_params, (3,3,3,16), jnp.float32), k), axis=2)
         else:
             rng, rng_params = jax.random.split(rng)
 
@@ -912,7 +927,7 @@ def main():
             latents = latents * vae.config.scaling_factor
 
             # Sample noise that we'll add to the latents
-            noise_rng, timestep_rng = jax.random.split(sample_rng)
+            prev_rng, noise_rng, timestep_rng = jax.random.split(sample_rng, 3)
             noise = jax.random.normal(noise_rng, latents.shape)
             # Sample a random timestep for each image
             bsz = latents.shape[0]
@@ -935,7 +950,11 @@ def main():
             )[0]
 
             controlnet_cond = minibatch["conditioning_pixel_values"]
-
+            bz = controlnet_cond.shape[0]
+            if args.proportion_previous_frame_zero:
+                use_previous_frame = jax.random.uniform(prev_rng, (bz,))>args.proportion_previous_frame_zero
+                controlnet_cond = jnp.concatenate((use_previous_frame*controlnet_cond[:,:3,:,:], controlnet_cond[:,3:,:,:]), axis=1)
+            
             # Predict the noise residual and compute loss
             down_block_res_samples, mid_block_res_sample = controlnet.apply(
                 {"params": params},
