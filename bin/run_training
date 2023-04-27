@@ -1,6 +1,6 @@
 python src/train_controlnet_flax.py \
 	--pretrained_model_name_or_path='/mnt/disks/persist/models/stable-diffusion-v1-5' \
-	--output_dir=/mnt/disks/persist/runs-512 \
+	--output_dir=/mnt/disks/persist/runs-transfer-512 \
         --resolution=512 \
         --train_batch_size=8 \
         --train_data_dir=/mnt/disks/persist/dances_subjects_training_data/data.py \
@@ -8,5 +8,13 @@ python src/train_controlnet_flax.py \
         --tracker_project_name=next-pose-control-net-2 \
 	--cache_dir=/home/jonathan/.huggingface-cache \
         --wandb_entity=jonathangfischoff \
-	--from_pt
-                
+	--from_pt \
+	--controlnet_model_name_or_path=lllyasviel/control_v11p_sd15_openpose \
+	--pose_validation_image=/home/jonathan/next-pose-control-net/test-data/validation-pose-frames/01.png \
+        --validation_prompt="Man standing full body" \
+        --validation_image=/home/jonathan/next-pose-control-net/test-data/validation-frames/00.png \
+        --transfer_pose_controlnet \
+        --controlnet_from_pt \
+        --zero_previous_image_kernel \
+        --dataloader_num_workers=64 \
+	--proportion_previous_frame_zero=0.5                
