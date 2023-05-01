@@ -254,7 +254,7 @@ class FlaxStableDiffusionMultiControlNetPipeline(FlaxDiffusionPipeline):
         guidance_scale: float,
         latents: Optional[jnp.array] = None,
         neg_prompt_ids: Optional[jnp.array] = None,
-        controlnet_conditioning_scale: float = 1.0,
+            controlnet_conditioning_scales: jnp.array = jnp.array([1.0, 1.0]),
     ):
         height, width = image[0].shape[-2:]
         if height % 64 != 0 or width % 64 != 0:
@@ -308,18 +308,22 @@ class FlaxStableDiffusionMultiControlNetPipeline(FlaxDiffusionPipeline):
 
             down_block_res_samples = []
             mid_block_res_sample = []
-            for cnet, cparams, cimage in zip((self.base_controlnet, self.controlnet), params["controlnet"], (base_image, image)):
+            for cnet, cparams, cimage, cweight in zip((self.base_controlnet, self.controlnet), params["controlnet"], (base_image, image), controlnet_conditioning_scales):
+                print('cweight', cweight)
+
                 c_down_block_res_samples, c_mid_block_res_sample = cnet.apply(
                     {"params": cparams},
                     jnp.array(latents_input),
                     jnp.array(timestep, dtype=jnp.int32),
                     encoder_hidden_states=context,
                     controlnet_cond=cimage,
-                    conditioning_scale=controlnet_conditioning_scale,
+                    conditioning_scale=cweight,
                     return_dict=False,
                 )
                 down_block_res_samples.append(c_down_block_res_samples)
                 mid_block_res_sample.append(c_mid_block_res_sample)
+            down_block_res_samples[-1] = jax.tree_util.tree_map(jax.nn.sigmoid, down_block_res_samples[-1])
+            mid_block_res_sample[-1] = jax.tree_util.tree_map(jax.nn.sigmoid, mid_block_res_sample[-1])
             down_block_res_samples = jax.tree_util.tree_map(jnp.add, *down_block_res_samples)
             mid_block_res_sample = jax.tree_util.tree_map(jnp.add, *mid_block_res_sample)
 
@@ -373,7 +377,7 @@ class FlaxStableDiffusionMultiControlNetPipeline(FlaxDiffusionPipeline):
         guidance_scale: Union[float, jnp.array] = 7.5,
         latents: jnp.array = None,
         neg_prompt_ids: jnp.array = None,
-        controlnet_conditioning_scale: Union[float, jnp.array] = 1.0,
+        controlnet_conditioning_scale: List[float] = [1.0, 1.0],
         return_dict: bool = True,
         jit: bool = False,
     ):
@@ -431,14 +435,20 @@ class FlaxStableDiffusionMultiControlNetPipeline(FlaxDiffusionPipeline):
                 # Assume sharded
                 guidance_scale = guidance_scale[:, None]
 
-        if isinstance(controlnet_conditioning_scale, float):
-            # Convert to a tensor so each device gets a copy. Follow the prompt_ids for
-            # shape information, as they may be sharded (when `jit` is `True`), or not.
-            controlnet_conditioning_scale = jnp.array([controlnet_conditioning_scale] * prompt_ids.shape[0])
-            if len(prompt_ids.shape) > 2:
-                # Assume sharded
-                controlnet_conditioning_scale = controlnet_conditioning_scale[:, None]
 
+
+        controlnet_conditioning_scale = jnp.array(controlnet_conditioning_scale)
+        print(controlnet_conditioning_scale, prompt_ids.shape)
+        #if isinstance(controlnet_conditioning_scale, float):
+        # Convert to a tensor so each device gets a copy. Follow the prompt_ids for
+            # shape information, as they may be sharded (when `jit` is `True`), or not.
+        controlnet_conditioning_scale = jnp.tile(controlnet_conditioning_scale, prompt_ids.shape[0])
+        if len(prompt_ids.shape) > 2:
+                # Assume sharded
+            controlnet_conditioning_scale = controlnet_conditioning_scale[None, :]
+
+
+        print(controlnet_conditioning_scale)
         if jit:
             images = _p_generate(
                 self,

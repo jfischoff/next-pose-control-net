@@ -1024,6 +1024,8 @@ def main():
                 return_dict=False,
             )
 
+            down_block_res_samples = jax.tree_util.tree_map(jax.nn.sigmoid, down_block_res_samples)
+            mid_block_res_sample = jax.tree_util.tree_map(jax.nn.sigmoid, mid_block_res_sample)
             
             model_pred = unet.apply(
                 {"params": unet_params},

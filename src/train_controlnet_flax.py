@@ -33,6 +33,7 @@ from flax import jax_utils
 from flax.core.frozen_dict import unfreeze
 from flax.training import train_state
 from flax.training.common_utils import shard
+import flax.linen as nn
 from huggingface_hub import create_repo, upload_folder
 from PIL import Image, PngImagePlugin
 from torch.utils.data import IterableDataset
@@ -405,6 +406,10 @@ def parse_args():
             " or to a folder containing files that 🤗 Datasets can understand."
         ),
     )
+    parser.add_argument("--delta_scale", type=float, default=0.1, help="The scale for determining dynamic parts of images.")
+    parser.add_argument("--delta_weight", type=float, default=0.0, help="Amount to focus loss on dynamic parts of image [0-1]."
+                        "0==uniform, 1==only moving")
+
     parser.add_argument("--streaming", action="store_true", help="To stream a large dataset from Hub.")
     parser.add_argument(
         "--dataset_config_name",
@@ -925,6 +930,10 @@ def main():
             latents = jnp.transpose(latents, (0, 3, 1, 2))
             latents = latents * vae.config.scaling_factor
 
+            delta_frames = jnp.abs(minibatch["pixel_values"] - minibatch["conditioning_pixel_values"][:,:3,:,:])
+            delta_frames_pooled = nn.avg_pool(delta_frames[:,:,:,:,None], (3,8,8), (3,8,8))[...,0]
+            delta_frames_mask = jax.nn.sigmoid(delta_frames_pooled / args.delta_scale)
+            
             # Sample noise that we'll add to the latents
             prev_rng, noise_rng, timestep_rng = jax.random.split(sample_rng, 3)
             noise = jax.random.normal(noise_rng, latents.shape)
@@ -982,7 +991,7 @@ def main():
             else:
                 raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
-            loss = (target - model_pred) ** 2
+            loss = (args.delta_weight*delta_frames_mask+ (1.0 - args.delta_weight))*(target - model_pred) ** 2  
 
             if args.snr_gamma is not None:
                 snr = jnp.array(compute_snr(timesteps))
