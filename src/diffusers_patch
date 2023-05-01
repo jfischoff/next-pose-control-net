@@ -1,0 +1,11 @@
+--- modeling_flax_utils.py	2023-05-01 19:16:59.380400055 +0100
++++ modeling_flax_utils_new.py	2023-05-01 19:16:07.571586586 +0100
+@@ -449,7 +449,7 @@
+ 
+         for key in state.keys():
+             if key in shape_state and state[key].shape != shape_state[key].shape:
+-                raise ValueError(
++                logger.warning(
+                     f"Trying to load the pretrained weight for {key} failed: checkpoint has shape "
+                     f"{state[key].shape} which is incompatible with the model shape {shape_state[key].shape}. "
+                 )

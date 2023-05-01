@@ -50,6 +50,7 @@ from diffusers import (
 )
 from diffusers.utils import check_min_version, is_wandb_available
 
+from mod_pipeline import  FlaxStableDiffusionMultiControlNetPipeline
 
 # To prevent an error that occurs when there are abnormally large compressed data chunk in the png image
 # see more https://github.com/python-pillow/Pillow/issues/5610
@@ -77,20 +78,21 @@ def image_grid(imgs, rows, cols):
     return grid
 
 
-def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_dtype):
+def log_validation(base_controlnet, base_controlnet_param, controlnet, controlnet_param, tokenizer, args, rng, weight_dtype):
     logger.info("Running validation... ")
 
-    pipeline, params = FlaxStableDiffusionControlNetPipeline.from_pretrained(
+    pipeline, params = FlaxStableDiffusionMultiControlNetPipeline.from_pretrained(
         args.pretrained_model_name_or_path,
         tokenizer=tokenizer,
-        controlnet=controlnet,
+        controlnet=[base_controlnet, controlnet],
         safety_checker=None,
         dtype=weight_dtype,
         revision=args.revision,
         from_pt=args.from_pt,
     )
     params = jax_utils.replicate(params)
-    params["controlnet"] = controlnet_params
+
+    params["controlnet"] = [jax_utils.replicate(base_controlnet_param), controlnet_param]
 
     num_samples = jax.device_count()
     prng_seed = jax.random.split(rng, jax.device_count())
@@ -124,17 +126,20 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
         processed_image = num_samples * [validation_image]
         processed_image = torch.stack([conditioning_image_transforms(image) for image in processed_image], dim=0)
 
+        
         pose_validation_image = Image.open(pose_validation_image).convert("RGB")
         pose_processed_image = num_samples * [pose_validation_image]
         pose_processed_image = torch.stack([conditioning_image_transforms(image) for image in pose_processed_image], dim=0)
 
+        sharded_processed_pose_image = shard(pose_processed_image.float().numpy())
+
         all_processed_image = torch.cat([processed_image, pose_processed_image], dim=1).float().numpy()
 
-        all_processed_image = shard(all_processed_image)
+        sharded_all_processed_image = shard(all_processed_image)
 
         images = pipeline(
             prompt_ids=prompt_ids,
-            image=all_processed_image,
+            image=[sharded_processed_pose_image, sharded_all_processed_image],
             params=params,
             prng_seed=prng_seed,
             num_inference_steps=50,
@@ -212,6 +217,29 @@ def parse_args():
         type=str,
         required=True,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
+    )
+    parser.add_argument(
+        "--base_controlnet_model_name_or_path",
+        default=None,
+        type=str,
+        help="Path to pretrained controlnet model or model identifier from huggingface.co/models."
+    )
+    parser.add_argument(
+        "--base_revision",
+        type=str,
+        default=None,
+        help="Revision of pretrained model identifier from huggingface.co/models.",
+    )
+    parser.add_argument(
+        "--base_controlnet_from_pt",
+        action="store_true",
+        help="Load the pretrained model from a PyTorch checkpoint.",
+    )
+    parser.add_argument(
+        "--base_controlnet_revision",
+        type=str,
+        default=None,
+        help="Revision of controlnet model identifier from huggingface.co/models.",
     )
     parser.add_argument(
         "--controlnet_model_name_or_path",
@@ -680,6 +708,7 @@ def make_train_dataset(args, tokenizer, batch_size=None):
         conditioning_images = torch.cat([conditioning_images_0, conditioning_images_1], dim=1)
         
         examples["pixel_values"] = images
+        examples["base_conditioning_pixel_values"] = conditioning_images_1
         examples["conditioning_pixel_values"] = conditioning_images
         examples["input_ids"] = tokenize_captions(examples)
 
@@ -709,6 +738,10 @@ def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
     pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
 
+    base_conditioning_pixel_values = torch.stack([example["base_conditioning_pixel_values"] for example in examples])
+    base_conditioning_pixel_values = base_conditioning_pixel_values.to(memory_format=torch.contiguous_format).float()
+
+    
     conditioning_pixel_values = torch.stack([example["conditioning_pixel_values"] for example in examples])
     conditioning_pixel_values = conditioning_pixel_values.to(memory_format=torch.contiguous_format).float()
 
@@ -716,6 +749,7 @@ def collate_fn(examples):
 
     batch = {
         "pixel_values": pixel_values,
+        "base_conditioning_pixel_values": base_conditioning_pixel_values,
         "conditioning_pixel_values": conditioning_pixel_values,
         "input_ids": input_ids,
     }
@@ -818,6 +852,15 @@ def main():
         from_pt=args.from_pt,
     )
 
+    logger.info("Loading existing base controlnet weights")
+    base_controlnet, base_params = FlaxControlNetModel.from_pretrained(
+        args.base_controlnet_model_name_or_path,
+        revision=args.base_controlnet_revision,
+        from_pt=args.base_controlnet_from_pt,
+        dtype=jnp.float32,
+    )
+
+    
     if args.controlnet_model_name_or_path:
         logger.info("Loading existing controlnet weights")
         controlnet, controlnet_params = FlaxControlNetModel.from_pretrained(
@@ -826,21 +869,14 @@ def main():
             from_pt=args.controlnet_from_pt,
             dtype=jnp.float32,
         )
-        if args.transfer_pose_controlnet:
-            k= controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']
-            if args.zero_previous_image_kernel:
-                controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jnp.concatenate((jnp.zeros_like(k), k), axis=2)
-            else:
-                rng, rng_params = jax.random.split(rng)
-                controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jnp.concatenate((jax.nn.initializers.lecun_normal()(rng_params, (3,3,3,16), jnp.float32), k), axis=2)
-        else:
-            rng, rng_params = jax.random.split(rng)
-
-            controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jax.nn.initializers.lecun_normal()(rng_params, (3,3,6,16), jnp.float32)
+        rng, rng_params = jax.random.split(rng)
+        controlnet_params['controlnet_cond_embedding']['conv_in']['kernel']=jax.nn.initializers.lecun_normal()(rng_params, (3,3,6,16), jnp.float32)
     else:
         logger.info("Initializing controlnet weights from unet")
         rng, rng_params = jax.random.split(rng)
 
+        
+        
         controlnet = FlaxControlNetModel(
             in_channels=unet.config.in_channels,
             down_block_types=unet.config.down_block_types,
@@ -957,6 +993,20 @@ def main():
                 train=False,
             )[0]
 
+            base_controlnet_cond = minibatch["base_conditioning_pixel_values"]
+            bz = base_controlnet_cond.shape[0]
+            # Predict the noise residual and compute loss
+            base_down_block_res_samples, base_mid_block_res_sample = base_controlnet.apply(
+                {"params": base_params},
+                noisy_latents,
+                timesteps,
+                encoder_hidden_states,
+                base_controlnet_cond,
+                train=False,
+                return_dict=False,
+            )
+
+            
             controlnet_cond = minibatch["conditioning_pixel_values"]
             bz = controlnet_cond.shape[0]
             if args.proportion_previous_frame_zero:
@@ -974,13 +1024,16 @@ def main():
                 return_dict=False,
             )
 
+            down_block_res_samples = jax.tree_util.tree_map(jax.nn.sigmoid, down_block_res_samples)
+            mid_block_res_sample = jax.tree_util.tree_map(jax.nn.sigmoid, mid_block_res_sample)
+            
             model_pred = unet.apply(
                 {"params": unet_params},
                 noisy_latents,
                 timesteps,
                 encoder_hidden_states,
-                down_block_additional_residuals=down_block_res_samples,
-                mid_block_additional_residual=mid_block_res_sample,
+                down_block_additional_residuals=jax.tree_util.tree_map(jnp.add, base_down_block_res_samples, down_block_res_samples),
+                mid_block_additional_residual=jax.tree_util.tree_map(jnp.add, base_mid_block_res_sample, mid_block_res_sample),
             ).sample
 
             # Get the target for loss depending on the prediction type
@@ -1154,7 +1207,7 @@ def main():
                 and global_step % args.validation_steps == 0
                 and jax.process_index() == 0
             ):
-                _ = log_validation(controlnet, state.params, tokenizer, args, validation_rng, weight_dtype)
+                _ = log_validation(base_controlnet, base_params, controlnet, state.params, tokenizer, args, validation_rng, weight_dtype)
 
             if global_step % args.logging_steps == 0 and jax.process_index() == 0:
                 if args.report_to == "wandb":
