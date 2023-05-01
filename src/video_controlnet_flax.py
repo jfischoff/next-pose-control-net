@@ -126,7 +126,7 @@ def log_validation(controlnet, controlnet_params, tokenizer, args, rng, weight_d
         prompt_ids = shard(prompt_ids)
 
         
-        for frame_idx, pose_validation_image in enumerate(glob.glob(pose_validation_image_dir+'/*.png')):
+        for frame_idx, pose_validation_image in enumerate(sorted(glob.glob(pose_validation_image_dir+'/*.png'))):
 
             
             pose_validation_image = Image.open(pose_validation_image).convert("RGB")
