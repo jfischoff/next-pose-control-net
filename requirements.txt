@@ -12,3 +12,4 @@ torchvision
 scikit-image
 basicsr
 cloud-tpu-client
+controlnet-aux==0.0.3
